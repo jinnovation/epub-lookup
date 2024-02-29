@@ -1,0 +1,11 @@
+langchain
+transformers
+accelerate
+bitsandbytes
+faiss-cpu
+typer
+pandoc
+unstructured
+pypandoc_binary
+torch
+sentence-transformers
