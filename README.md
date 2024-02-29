@@ -21,6 +21,7 @@ The main relationships in the book are:
 - [Langchain](https://python.langchain.com/docs/get_started/introduction)
 - [Llama 2](https://llama.meta.com/)
 - [Ollama](https://ollama.com/)
+- [FAISS](https://github.com/facebookresearch/faiss)
 
 ## References
 
