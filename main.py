@@ -2,6 +2,7 @@
 import torch
 import typer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.llms.ollama import Ollama
 from langchain_community.document_loaders import TextLoader, UnstructuredEPubLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
@@ -16,76 +17,59 @@ from transformers import (
     pipeline,
 )
 
+# TODO: Start ollama in background if not already running
 
+
+# TODO: persist the embeddings database. find a way to cache the embeddings for
+# each book by some combination of: hash of the entire file; embedding model
+# used
+
+
+# TODO: complain if the file provided is not epub
+
+
+# TODO: support loading and performing queries on an entire Calibre library
+
+
+# TODO: Use llama2:7b-chat instead of vanilla llama; use ChatOllama "component"
+
+
+# TODO: Support JSON schema? https://python.langchain.com/docs/integrations/chat/ollama#extraction
 def main(file: str, query: str = "What is the title of the book?"):
-    # loader = UnstructuredEPubLoader(file)
-    loader = TextLoader(file)
+    loader = UnstructuredEPubLoader(file)
     docs = loader.load()
 
     splitter = RecursiveCharacterTextSplitter(chunk_size=512, chunk_overlap=30)
 
     chunked_docs = splitter.split_documents(docs)
-    print("split")
 
     # embeddings_model = HuggingFaceEmbeddings(model_name="BAAI/bge-base-en-v1.5")
     embeddings_model = HuggingFaceEmbeddings()
-    print("embedding model loaded")
 
     db = faiss.FAISS.from_documents(chunked_docs, embeddings_model)
     retriever = db.as_retriever(search_type="similarity", search_kwargs=dict(k=4))
 
-    print("db")
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 
-    model_name = "HuggingFaceH4/zephyr-7b-beta"
+    llm = Ollama(model="llama2")
 
-    # NB(@jinnovation): Does not support M1
-    # bnb_config = BitsAndBytesConfig(
-    #     load_in_4bit=True,
-    #     bnb_4bit_use_double_quant=True,
-    #     bnb_4bit_quant_type="nf4",
-    #     bnb_4bit_compute_dtype=torch.bfloat16,
-    # )
-
-    model = AutoModelForCausalLM.from_pretrained(
-        # model_name, quantization_config=bnb_config
-        model_name,
+    msgs = tokenizer.apply_chat_template(
+        [
+            {
+                "role": "system",
+                "content": "Answer the question based on your knowledge. Use the following context to help:\n{context}",
+            },
+            {
+                "role": "user",
+                "content": "{question}",
+            },
+        ],
+        tokenize=False,
     )
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-    print("model and tokenizer")
-
-    text_gen_pipeline = pipeline(
-        model=model,
-        tokenizer=tokenizer,
-        task="text-generation",
-        temperature=0.2,
-        do_sample=True,
-        repetition_penalty=1.1,
-        return_full_text=True,
-        max_new_tokens=400,
-    )
-
-    llm = HuggingFacePipeline(
-        pipeline=text_gen_pipeline,
-    )
-
-    prompt_template = """
-<|system|>
-Answer the question based on your knowledge. Use the following context to help:
-
-{context}
-
-</s>
-<|user|>
-{question}
-</s>
-<|assistant|>
-
- """
 
     prompt = PromptTemplate(
         input_variables=["context", "question"],
-        template=prompt_template,
+        template=msgs,
     )
 
     llm_chain = prompt | llm | StrOutputParser()
@@ -95,7 +79,6 @@ Answer the question based on your knowledge. Use the following context to help:
         "question": RunnablePassthrough(),
     } | llm_chain
 
-    print("chains")
     print(rag_chain.invoke(query))
 
 
